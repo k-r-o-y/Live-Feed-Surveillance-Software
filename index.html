@@ -1,0 +1,699 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>People detect → TouchDesigner</title>
+  <style>
+    :root{
+      --bg:#0b0f17;
+      --panel:rgba(18,24,38,.72);
+      --panel2:rgba(18,24,38,.55);
+      --stroke:rgba(255,255,255,.12);
+      --text:rgba(255,255,255,.92);
+      --muted:rgba(255,255,255,.62);
+      --accent:#7c5cff;
+      --good:#2ee59d;
+      --warn:#ffcc66;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:16px;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 600px at 20% 10%, rgba(124,92,255,.18), transparent 55%),
+        radial-gradient(900px 500px at 80% 30%, rgba(46,229,157,.12), transparent 55%),
+        var(--bg);
+    }
+    h2{ margin:0 0 10px; font-size:18px; font-weight:700; }
+
+    #status { margin: 8px 0 12px; color:var(--muted); font-size: 13px; }
+
+    #controls {
+      display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap;
+      padding:10px 10px;
+      border:1px solid var(--stroke);
+      border-radius:14px;
+      background:rgba(255,255,255,.04);
+      backdrop-filter: blur(10px);
+    }
+    button { padding: 8px 12px; border-radius:12px; border:1px solid var(--stroke); background:rgba(0,0,0,.2); color:var(--text); cursor:pointer; }
+    button:disabled{ opacity:.5; cursor:not-allowed; }
+    label { font-size: 13px; color:var(--muted); }
+    input[type="range"] { width: 220px; }
+
+    .wrap{
+      display:grid;
+      grid-template-columns: 1fr 320px;
+      gap:12px;
+      align-items:start;
+    }
+    @media (max-width: 980px){
+      .wrap{ grid-template-columns: 1fr; }
+    }
+
+    #frame {
+      position: relative;
+      width: 960px;
+      max-width: 100%;
+      border-radius: 16px;
+      overflow: hidden;
+      border:1px solid var(--stroke);
+      background:#000;
+      box-shadow: 0 18px 55px rgba(0,0,0,.45);
+    }
+    #videoCanvas, #overlayCanvas { display:block; width:100%; height:auto; }
+    #overlayCanvas { position:absolute; left:0; top:0; pointer-events:auto; }
+
+    video { display:none; }
+
+    /* Right panel cards */
+    aside{
+      position:sticky;
+      top:12px;
+      border:1px solid var(--stroke);
+      border-radius:16px;
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      backdrop-filter: blur(12px);
+      overflow:hidden;
+      box-shadow: 0 18px 55px rgba(0,0,0,.35);
+    }
+    .panelHead{
+      padding:12px 12px 10px;
+      display:flex; justify-content:space-between; align-items:center;
+      border-bottom:1px solid var(--stroke);
+      background:rgba(0,0,0,.18);
+    }
+    .panelHead h3{ margin:0; font-size:14px; letter-spacing:.2px; }
+    .panelHead .small{ font-size:12px; color:var(--muted); }
+    #cards{ max-height: 640px; overflow:auto; padding:10px; }
+    .card{
+      border:1px solid var(--stroke);
+      border-radius:14px;
+      background:var(--panel2);
+      padding:10px;
+      margin-bottom:10px;
+      transition: transform .12s ease, border-color .12s ease;
+      cursor:pointer;
+    }
+    .card:hover{ transform: translateY(-1px); border-color: rgba(124,92,255,.35); }
+    .row{ display:flex; justify-content:space-between; gap:10px; }
+    .tag{
+      font-size:11px;
+      color:rgba(255,255,255,.78);
+      border:1px solid rgba(255,255,255,.12);
+      padding:4px 8px;
+      border-radius:999px;
+      background:rgba(0,0,0,.14);
+      white-space:nowrap;
+    }
+    .id{ font-weight:800; font-size:13px; }
+    .kv{ margin-top:8px; display:grid; grid-template-columns: 1fr 1fr; gap:6px 10px; }
+    .k{ color:var(--muted); font-size:11px; }
+    .v{ text-align:right; font-size:11px; }
+
+    /* Bottom HUD */
+    #hud{
+      position:absolute;
+      left:14px; right:14px; bottom:14px;
+      display:flex; gap:10px; align-items:stretch;
+      pointer-events:none;
+    }
+    .hudBox{
+      flex:1;
+      border:1px solid var(--stroke);
+      border-radius:16px;
+      background:var(--panel);
+      backdrop-filter: blur(12px);
+      padding:12px 12px;
+      box-shadow: 0 10px 35px rgba(0,0,0,.35);
+      display:flex; justify-content:space-between; gap:12px;
+      min-height:64px;
+    }
+    .hudTitle{ font-size:12px; color:var(--muted); margin-bottom:4px; }
+    .hudMain{ font-size:14px; font-weight:800; }
+    .hudSub{ font-size:12px; color:rgba(255,255,255,.72); margin-top:2px; }
+    .hudRight{ text-align:right; }
+    .meter{
+      height:6px; width:140px;
+      border-radius:999px;
+      background:rgba(255,255,255,.1);
+      overflow:hidden;
+      margin-top:6px;
+    }
+    .bar{ height:100%; width:0%; background: linear-gradient(90deg, rgba(124,92,255,.95), rgba(46,229,157,.85)); }
+
+    /* tiny pill */
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 10px;
+      border:1px solid var(--stroke);
+      border-radius:999px;
+      background:rgba(255,255,255,.04);
+      font-size:12px;
+      color:var(--muted);
+    }
+    .dot{ width:8px; height:8px; border-radius:50%; background:var(--warn); box-shadow:0 0 18px rgba(255,204,102,.55); }
+    .dot.ok{ background:var(--good); box-shadow:0 0 18px rgba(46,229,157,.55); }
+  </style>
+</head>
+
+<body>
+  <h2>People detect → TouchDesigner</h2>
+
+  <div id="controls">
+    <span class="pill"><span class="dot ok"></span>Local HUD (no table)</span>
+
+    <button id="pickBtn" disabled>Pick random person</button>
+    <button id="clearBtn" disabled>Clear highlight</button>
+
+    <label>
+      Threshold: <span id="thrVal">0.15</span>
+      <input id="thr" type="range" min="0.05" max="0.60" step="0.01" value="0.15">
+    </label>
+
+    <label>
+      Detect every (ms):
+      <select id="cadence">
+        <option value="250">250</option>
+        <option value="400">400</option>
+        <option value="600" selected>600</option>
+        <option value="900">900</option>
+      </select>
+    </label>
+
+    <label>
+      Detect width:
+      <select id="detW">
+        <option value="480">480 (fast)</option>
+        <option value="640" selected>640</option>
+        <option value="960">960 (better)</option>
+      </select>
+    </label>
+  </div>
+
+  <div id="status">Starting…</div>
+
+  <div class="wrap">
+    <div id="frame">
+      <canvas id="videoCanvas"></canvas>
+      <canvas id="overlayCanvas"></canvas>
+
+      <div id="hud">
+        <div class="hudBox">
+          <div>
+            <div class="hudTitle">Focused target</div>
+            <div class="hudMain" id="focusTitle">—</div>
+            <div class="hudSub" id="focusSub">Click a box (or a card) to focus</div>
+          </div>
+          <div class="hudRight">
+            <div class="hudTitle">Confidence</div>
+            <div class="hudMain" id="focusConf">—</div>
+            <div class="meter"><div class="bar" id="confBar"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside>
+      <div class="panelHead">
+        <h3>Detected</h3>
+        <div class="small" id="detCount">0</div>
+      </div>
+      <div id="cards"></div>
+    </aside>
+  </div>
+
+  <video id="vid" playsinline preload="metadata">
+    <source src="feed.mp4" type="video/mp4" />
+  </video>
+
+  <script>
+    // ---------- WebSocket to Node hub (send-only for now) ----------
+    const WS_URL = "ws://127.0.0.1:8765";
+    let ws = null;
+
+    function wsConnect() {
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        console.log("WS connected");
+        ws.send(JSON.stringify({ type: "ping", ts: Date.now() }));
+      };
+
+      ws.onclose = () => setTimeout(wsConnect, 1000);
+      ws.onerror = () => {};
+      ws.onmessage = () => {}; // ignore (HUD is local)
+    }
+    wsConnect();
+
+    function wsSend(obj) {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+    }
+    function wsSendPeople(people, selectedId, videoW, videoH) {
+      wsSend({
+        type: "people",
+        ts: Date.now(),
+        video: { w: videoW, h: videoH },
+        selected: selectedId ?? null,
+        people
+      });
+    }
+
+    // ---------- UI + Canvas ----------
+    const frame = document.getElementById("frame");
+    const video = document.getElementById("vid");
+
+    const videoCanvas = document.getElementById("videoCanvas");
+    const vctx = videoCanvas.getContext("2d");
+
+    const overlayCanvas = document.getElementById("overlayCanvas");
+    const octx = overlayCanvas.getContext("2d");
+
+    const statusEl = document.getElementById("status");
+    const pickBtn = document.getElementById("pickBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const thr = document.getElementById("thr");
+    const thrVal = document.getElementById("thrVal");
+    const cadenceSel = document.getElementById("cadence");
+    const detWSel = document.getElementById("detW");
+
+    const cardsEl = document.getElementById("cards");
+    const detCountEl = document.getElementById("detCount");
+    const focusTitle = document.getElementById("focusTitle");
+    const focusSub = document.getElementById("focusSub");
+    const focusConf = document.getElementById("focusConf");
+    const confBar = document.getElementById("confBar");
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+    function getThreshold() { return parseFloat(thr.value); }
+    function getCadence() { return parseInt(cadenceSel.value, 10); }
+    function getDetW() { return parseInt(detWSel.value, 10); }
+
+    thr.addEventListener("input", () => thrVal.textContent = thr.value);
+
+    // ---------- Fake "Watch Dogs" stats (stable per id) ----------
+    const TRAITS = ["Night Owl","Runner","Tourist","Local","Photographer","Gamer","Cyclist","Student","Coffee Addict","Musician"];
+    const RISK = ["Low","Moderate","Elevated","Unknown"];
+
+    function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; } }
+    function statsForId(id){
+      const rnd = mulberry32(1337 + (id*99991));
+      const pick = (arr)=> arr[Math.floor(rnd()*arr.length)];
+      return {
+        trait: pick(TRAITS),
+        risk: pick(RISK),
+        ping: (10 + rnd()*240).toFixed(0) + " ms",
+        signal: (50 + rnd()*50).toFixed(0) + "%"
+      };
+    }
+
+    // ---------- Fake names (stable per track id) ----------
+    const FIRST = ["Alex","Sam","Jordan","Taylor","Casey","Riley","Avery","Quinn","Drew","Cameron","Morgan","Jamie","Kendall","Rowan","Parker","Skyler"];
+    const LAST  = ["Stone","Reed","Hayes","Brooks","Wells","Hart","Blake","Cole","Fox","Lane","Pike","Rowe","Snow","Cross","Vale","Knox"];
+    function nameForId(id) {
+      const a = (id * 2654435761) >>> 0;
+      const f = FIRST[a % FIRST.length];
+      const l = LAST[(a >>> 8) % LAST.length];
+      return `${f} ${l}`;
+    }
+
+    // ---------- Simple multi-person tracker ----------
+    let nextTrackId = 1;
+    const tracks = new Map(); // id -> {id, name, cx, cy, bbox, lastSeenMs, score, stats}
+    const MAX_DIST = 120;
+    const TTL_MS = 1200;
+
+    function bboxCentroid(b) { return { cx: b.x + b.w/2, cy: b.y + b.h/2 }; }
+
+    function updateTracks(dets, nowMs) {
+      const activeIds = Array.from(tracks.keys());
+      const matchedTrack = new Set();
+
+      for (const det of dets) {
+        const { cx, cy } = bboxCentroid(det);
+
+        let bestId = null;
+        let bestD = Infinity;
+
+        for (const id of activeIds) {
+          if (matchedTrack.has(id)) continue;
+          const t = tracks.get(id);
+          const dx = t.cx - cx;
+          const dy = t.cy - cy;
+          const d = Math.hypot(dx, dy);
+          if (d < bestD) { bestD = d; bestId = id; }
+        }
+
+        if (bestId !== null && bestD <= MAX_DIST) {
+          matchedTrack.add(bestId);
+          const t = tracks.get(bestId);
+          t.cx = cx; t.cy = cy; t.bbox = det; t.score = det.score; t.lastSeenMs = nowMs;
+        } else {
+          const id = nextTrackId++;
+          tracks.set(id, {
+            id,
+            name: nameForId(id),
+            stats: statsForId(id),
+            cx, cy,
+            bbox: det,
+            score: det.score,
+            lastSeenMs: nowMs
+          });
+        }
+      }
+
+      for (const [id, t] of tracks.entries()) {
+        if (nowMs - t.lastSeenMs > TTL_MS) tracks.delete(id);
+      }
+    }
+
+    // ---------- Selection + hover ----------
+    let selectedId = null;
+    let hoverId = null;
+
+    pickBtn.addEventListener("click", () => {
+      const ids = Array.from(tracks.keys());
+      if (!ids.length) return;
+      selectedId = ids[Math.floor(Math.random() * ids.length)];
+      drawOverlay();
+      renderHUD();
+      sendToTD();
+    });
+
+    clearBtn.addEventListener("click", () => {
+      selectedId = null;
+      drawOverlay();
+      renderHUD();
+      sendToTD();
+    });
+
+    frame.addEventListener("click", () => {
+      if (video.paused) video.play();
+      else video.pause();
+    });
+
+    function canvasToVideoXY(px, py){
+      const rect = overlayCanvas.getBoundingClientRect();
+      const sx = video.videoWidth / rect.width;
+      const sy = video.videoHeight / rect.height;
+      const x = (px - rect.left) * sx;
+      const y = (py - rect.top) * sy;
+      return {x, y};
+    }
+
+    function hitTest(x, y){
+      // choose the smallest box that contains point (feels nicer)
+      let best = null;
+      let bestArea = Infinity;
+      for (const [id, t] of tracks.entries()){
+        const b = t.bbox;
+        if (x >= b.x && x <= b.x+b.w && y >= b.y && y <= b.y+b.h){
+          const area = b.w*b.h;
+          if (area < bestArea){ bestArea = area; best = id; }
+        }
+      }
+      return best;
+    }
+
+    overlayCanvas.addEventListener("mousemove", (e) => {
+      if (!video.videoWidth) return;
+      const {x,y} = canvasToVideoXY(e.clientX, e.clientY);
+      hoverId = hitTest(x,y);
+    });
+
+    overlayCanvas.addEventListener("click", (e) => {
+      if (!video.videoWidth) return;
+      const {x,y} = canvasToVideoXY(e.clientX, e.clientY);
+      const hit = hitTest(x,y);
+      if (hit != null){
+        selectedId = hit;
+        clearBtn.disabled = false;
+        drawOverlay();
+        renderHUD();
+        sendToTD();
+      }
+    });
+
+    // ---------- Rendering ----------
+    function setDisplayCanvasSize() {
+      const displayW = Math.floor(frame.clientWidth);
+      const aspect = video.videoHeight / video.videoWidth;
+      const displayH = Math.floor(displayW * aspect);
+
+      if (videoCanvas.width !== displayW || videoCanvas.height !== displayH) {
+        videoCanvas.width = displayW;
+        videoCanvas.height = displayH;
+      }
+      if (overlayCanvas.width !== displayW || overlayCanvas.height !== displayH) {
+        overlayCanvas.width = displayW;
+        overlayCanvas.height = displayH;
+      }
+      frame.style.height = displayH + "px";
+    }
+
+    function drawOverlay() {
+      if (!video.videoWidth || !video.videoHeight) return;
+      setDisplayCanvasSize();
+      octx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+      const sx = overlayCanvas.width / video.videoWidth;
+      const sy = overlayCanvas.height / video.videoHeight;
+
+      // subtle top strip
+      octx.fillStyle = "rgba(0,0,0,0.35)";
+      octx.fillRect(10, 10, 310, 28);
+      octx.font = "12px ui-sans-serif, system-ui";
+      octx.fillStyle = "rgba(255,255,255,0.85)";
+      octx.fillText(`Tracks: ${tracks.size} • Hover: ${hoverId ?? "—"} • Selected: ${selectedId ?? "—"}`, 18, 29);
+
+      for (const [id, t] of tracks.entries()) {
+        const b = t.bbox;
+        const x = b.x * sx, y = b.y * sy, w = b.w * sx, h = b.h * sy;
+
+        const isSel = (id === selectedId);
+        const isHover = (id === hoverId);
+
+        octx.lineWidth = isSel ? 3 : (isHover ? 2.5 : 1.5);
+        octx.strokeStyle = isSel ? "rgba(124,92,255,.95)" : (isHover ? "rgba(46,229,157,.95)" : "rgba(255,255,255,.55)");
+        octx.strokeRect(x, y, w, h);
+
+        if (isSel || isHover){
+          octx.fillStyle = isSel ? "rgba(124,92,255,.12)" : "rgba(46,229,157,.10)";
+          octx.fillRect(x, y, w, h);
+        }
+
+        // label chip
+        const label = `${t.name} #${id} • ${(t.score*100).toFixed(0)}%`;
+        octx.font = "12px ui-sans-serif, system-ui";
+        const pad = 6;
+        const tw = octx.measureText(label).width;
+        const bx = x, by = Math.max(0, y - 20);
+        octx.fillStyle = "rgba(0,0,0,.55)";
+        octx.fillRect(bx, by, tw + pad*2, 16);
+        octx.strokeStyle = "rgba(255,255,255,.12)";
+        octx.lineWidth = 1;
+        octx.strokeRect(bx, by, tw + pad*2, 16);
+        octx.fillStyle = "rgba(255,255,255,.92)";
+        octx.fillText(label, bx + pad, by + 12);
+
+        // centroid dot
+        octx.beginPath();
+        octx.fillStyle = isSel ? "rgba(124,92,255,.95)" : (isHover ? "rgba(46,229,157,.95)" : "rgba(255,255,255,.6)");
+        octx.arc(t.cx * sx, t.cy * sy, isSel ? 5 : 3.5, 0, Math.PI * 2);
+        octx.fill();
+      }
+
+      // Update side panel count (cheap, keeps UI responsive)
+      detCountEl.textContent = String(tracks.size);
+    }
+
+    function renderCards(){
+      // top N by score
+      const list = Array.from(tracks.values())
+        .sort((a,b)=> (b.score||0)-(a.score||0))
+        .slice(0, 12);
+
+      cardsEl.innerHTML = "";
+      for (const t of list){
+        const div = document.createElement("div");
+        div.className = "card";
+        div.style.borderColor = (t.id===selectedId) ? "rgba(124,92,255,.55)" : "rgba(255,255,255,.12)";
+
+        div.innerHTML = `
+          <div class="row">
+            <div class="id">${t.name} <span style="color:var(--muted);font-weight:600">#${t.id}</span></div>
+            <div class="tag">${(t.score*100).toFixed(0)}%</div>
+          </div>
+          <div class="kv">
+            <div class="k">Trait</div><div class="v">${t.stats.trait}</div>
+            <div class="k">Risk</div><div class="v">${t.stats.risk}</div>
+            <div class="k">Latency</div><div class="v">${t.stats.ping}</div>
+            <div class="k">Signal</div><div class="v">${t.stats.signal}</div>
+          </div>
+        `;
+        div.addEventListener("click", () => {
+          selectedId = t.id;
+          clearBtn.disabled = false;
+          drawOverlay();
+          renderHUD();
+          sendToTD();
+        });
+        cardsEl.appendChild(div);
+      }
+    }
+
+    function renderHUD(){
+      const t = selectedId ? tracks.get(selectedId) : null;
+      if (!t){
+        focusTitle.textContent = "—";
+        focusSub.textContent = "Click a box (or a card) to focus";
+        focusConf.textContent = "—";
+        confBar.style.width = "0%";
+        renderCards();
+        return;
+      }
+      focusTitle.textContent = `${t.name} (#${t.id})`;
+      focusSub.textContent = `${t.stats.trait} • Risk: ${t.stats.risk} • Latency: ${t.stats.ping}`;
+      const pct = Math.max(0, Math.min(100, (t.score||0)*100));
+      focusConf.textContent = pct.toFixed(0) + "%";
+      confBar.style.width = pct.toFixed(0) + "%";
+      renderCards();
+    }
+
+    function drawVideoLoop() {
+      if (video.readyState >= 2) {
+        setDisplayCanvasSize();
+        vctx.drawImage(video, 0, 0, videoCanvas.width, videoCanvas.height);
+      }
+      drawOverlay();
+      requestAnimationFrame(drawVideoLoop);
+    }
+
+    // ---------- Detection in Web Worker ----------
+    const worker = new Worker("./detector.worker.js");
+    let workerReady = false;
+    let detectTimer = null;
+    let inFlight = false;
+
+    const detCanvas = document.createElement("canvas");
+    const detCtx = detCanvas.getContext("2d", { willReadFrequently: true });
+
+    function restartDetectionTimer() {
+      if (detectTimer) clearInterval(detectTimer);
+      detectTimer = setInterval(requestDetect, getCadence());
+    }
+    cadenceSel.addEventListener("change", restartDetectionTimer);
+    detWSel.addEventListener("change", () => requestDetect());
+
+    function requestDetect() {
+      if (!workerReady || inFlight) return;
+      if (video.readyState < 2) return;
+      if (video.paused || video.ended) return;
+
+      const targetW = getDetW();
+      const aspect = video.videoHeight / video.videoWidth;
+      detCanvas.width = targetW;
+      detCanvas.height = Math.floor(targetW * aspect);
+
+      detCtx.drawImage(video, 0, 0, detCanvas.width, detCanvas.height);
+
+      const img = detCtx.getImageData(0, 0, detCanvas.width, detCanvas.height);
+      inFlight = true;
+
+      worker.postMessage({
+        type: "detect",
+        width: detCanvas.width,
+        height: detCanvas.height,
+        threshold: getThreshold(),
+        buffer: img.data.buffer
+      }, [img.data.buffer]);
+    }
+
+    // ---------- Send to TouchDesigner ----------
+    function sendToTD() {
+      if (!video.videoWidth || !video.videoHeight) return;
+
+      const out = [];
+      for (const [id, t] of tracks.entries()) {
+        out.push({
+          id,
+          name: t.name,
+          score: t.score,
+          bbox_px: { x: t.bbox.x, y: t.bbox.y, w: t.bbox.w, h: t.bbox.h },
+          centroid_px: { x: t.cx, y: t.cy },
+          centroid_norm: { x: t.cx / video.videoWidth, y: t.cy / video.videoHeight }
+        });
+      }
+
+      wsSendPeople(out, selectedId, video.videoWidth, video.videoHeight);
+    }
+
+    // ---------- Worker messages ----------
+    worker.onmessage = (e) => {
+      const msg = e.data;
+
+      if (msg.type === "ready") {
+        workerReady = true;
+        setStatus("Worker ready. Click video to play/pause. Hover/click boxes to focus.");
+        return;
+      }
+
+      if (msg.type === "error") {
+        inFlight = false;
+        setStatus("Worker error: " + msg.message);
+        return;
+      }
+
+      if (msg.type === "result") {
+        inFlight = false;
+
+        const detW = msg.width;
+        const detH = msg.height;
+        const sx = video.videoWidth / detW;
+        const sy = video.videoHeight / detH;
+
+        const detsVideo = msg.people.map(p => ({
+          x: p.x * sx,
+          y: p.y * sy,
+          w: p.w * sx,
+          h: p.h * sy,
+          score: p.score
+        }));
+
+        const now = Date.now();
+        updateTracks(detsVideo, now);
+
+        if (selectedId && !tracks.has(selectedId)) selectedId = null;
+        if (hoverId && !tracks.has(hoverId)) hoverId = null;
+
+        pickBtn.disabled = (tracks.size === 0);
+        clearBtn.disabled = (selectedId === null);
+
+        setStatus(`Detecting… thr=${getThreshold().toFixed(2)} | Tracks=${tracks.size} | detW=${detW}`);
+
+        renderHUD();
+        sendToTD();
+      }
+    };
+
+    // ---------- Startup ----------
+    window.addEventListener("resize", () => {
+      if (video.videoWidth) {
+        setDisplayCanvasSize();
+        drawOverlay();
+      }
+    });
+
+    video.addEventListener("loadedmetadata", () => {
+      setDisplayCanvasSize();
+      renderHUD();
+      requestAnimationFrame(drawVideoLoop);
+      restartDetectionTimer();
+      setStatus(`Video ready ${video.videoWidth}×${video.videoHeight}. Click video to play/pause.`);
+    });
+
+    setStatus("Starting worker + waiting for video…");
+  </script>
+</body>
+</html>
